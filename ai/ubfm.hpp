@@ -51,8 +51,8 @@ std::ostream& operator<<(std::ostream& os, const NodeState n) {
 class Node {
 public:
     Node() : child_nodes(nullptr),
-             parent_move(MOVE_NONE),
-             best_move(MOVE_NONE),
+             parent_move(MOVE_PASS),
+             best_move(MOVE_PASS),
              state(NodeUnknown),
              w(0.0),
              init_w(0.0),
@@ -65,7 +65,7 @@ public:
     void init() {
         this->w = this->init_w = 0.0;
         this->n = 0;
-        this->parent_move = this->best_move = MOVE_NONE;
+        this->parent_move = this->best_move = MOVE_PASS;
         this->child_len = -1;
         this->child_nodes = nullptr;
         this->ply = 0;

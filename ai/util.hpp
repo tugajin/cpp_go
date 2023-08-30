@@ -184,6 +184,28 @@ template<class T> std::string to_string(T x) {
 	return ss.str();
 }
 
+int to_int(std::string x) {
+	return std::stoi(x);
+}
+
+void my_split(std::string string,  std::string separator, std::vector<std::string>& list) {
+	const auto separator_length = separator.size();
+	if (separator_length == 0) {
+		list.push_back(string);
+	} else {
+		auto offset = std::string::size_type(0);
+		while (1) {
+			const auto pos = string.find(separator, offset);
+			if (pos == std::string::npos) {
+				list.push_back(string.substr(offset));
+				break;
+			}
+			list.push_back(string.substr(offset, pos - offset));
+			offset = pos + separator_length;
+		}
+	}
+}
+
 void my_sleep(const int  millisec) {
 	std::this_thread::sleep_for(std::chrono::milliseconds(millisec));
 }

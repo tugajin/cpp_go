@@ -8,7 +8,7 @@ typedef std::vector<std::vector<int>> Feature;
 typedef double NNScore;
 typedef uint64 Key;
 
-static constexpr int MAX_PLY = 128;
+static constexpr int MAX_PLY = 64;
 
 enum Move : int {
     MOVE_PASS = -1,
@@ -32,17 +32,17 @@ enum File : int {
     FILE_F = 6,
     FILE_G = 7,
     FILE_H = 8,
-    FILE_I = 9,
-    FILE_J = 10,
-    FILE_K = 11,
-    FILE_L = 12,
-    FILE_M = 13,
-    FILE_N = 14,
-    FILE_O = 15,
-    FILE_P = 16,
-    FILE_Q = 17,
-    FILE_R = 18,
-    FILE_S = 19,
+    FILE_J = 9,
+    FILE_K = 10,
+    FILE_L = 11,
+    FILE_M = 12,
+    FILE_N = 13,
+    FILE_O = 14,
+    FILE_P = 15,
+    FILE_Q = 16,
+    FILE_R = 17,
+    FILE_S = 18,
+    FILE_T = 19,
     FILE_SIZE = FILE_D + 2,
 };
 enum Rank : int {
@@ -70,6 +70,7 @@ enum Rank : int {
 
 enum Square : int {
     SQUARE_SIZE = FILE_SIZE * RANK_SIZE,
+    POS_SIZE = (FILE_SIZE - 2) * (RANK_SIZE - 2),
     DIR_UP = -FILE_SIZE,
     DIR_LEFT  = -1,
     DIR_RIGHT = +1,
@@ -201,7 +202,7 @@ NNScore to_nnscore(const float sc) {
 }
 
 inline std::string file_str(const File f) {
-    std::string str[] = { "WALL_F", "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S" };
+    std::string str[] = { "WALL_F", "A","B","C","D","E","F","G","H","J","K","L","M","N","O","P","Q","R","S","T" };
     return str[f];
 }
 inline std::string rank_str(const Rank r) {

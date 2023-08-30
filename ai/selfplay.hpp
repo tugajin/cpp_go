@@ -518,8 +518,7 @@ nn::NNScore int_to_nn(const int sc) {
 void DescentSearcherLocal::selfplay() {
     Tee<<"start selfplay\n";
     for(auto i = 0; !g_selfplay_info.is_end() ; i++) {
-        game::Position pos;
-        pos = hash::hirate();
+        auto pos = game::Position();
         this->replay_buffer.open();
         this->resolved_buffer.open();
         while(true) {

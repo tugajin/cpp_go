@@ -90,8 +90,7 @@ void predict(const int gpu_id, std::vector<nn::Feature> &feat_list, std::vector<
 
 void test_model() {
     g_gpu_model[0].load_model(0);
-    game::Position pos;
-    pos = hash::hirate();
+    auto pos = game::Position();
     auto feat = nn::feature(pos);
     std::vector<nn::Feature> feat_list;
     std::vector<nn::NNScore> output_list;
@@ -102,7 +101,7 @@ void test_model() {
     Tee<<output_list[0]<<std::endl;
 }
 nn::NNScore predict_problem(const Key k) {
-    auto pos = hash::from_hash(k);
+    auto pos = game::Position();//hash::from_hash(k);
     //Tee<<pos<<std::endl;
     if (pos.is_lose()) {
         return nn::NNScore(-0.99);

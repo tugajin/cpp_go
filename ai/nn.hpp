@@ -4,7 +4,7 @@
 #include "common.hpp"
 #include <vector>
 namespace nn {
-constexpr inline int FEAT_SIZE = 2;
+constexpr inline int FEAT_SIZE = 3;
 typedef std::vector<std::vector<int>> Feature;
 typedef double NNScore;
 
@@ -19,10 +19,34 @@ inline NNScore to_nnscore(const float sc) {
 }
 
 Feature feature(const game::Position &pos) {
-    Feature feat(FEAT_SIZE, std::vector<int>(SQUARE_SIZE, 0));
-    REP_POS(i) {
-        feat[0][i] = pos.self(i);
-        feat[1][i] = pos.enemy(i);
+    Feature feat(FEAT_SIZE, std::vector<int>(POS_SIZE, 0));
+    auto i = 0;
+    REP_RANK2(r) {
+        REP_FILE2(f) {
+            const auto sq = to_sq(f, r);
+            if (pos.ko() == sq) {
+                feat[i][2] = 1;
+            }
+            switch(pos.square(sq)) {
+                case BLACK:
+                    if (pos.turn() == BLACK) {
+                        feat[i][0] = 1;
+                    } else {
+                        feat[i][1] = 1;
+                    }
+                    break;
+                case WHITE:
+                    if (pos.turn() == BLACK) {
+                        feat[i][1] = 1;
+                    } else {
+                        feat[i][0] = 1;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            ++i;
+        }
     }
     return feat;
 }

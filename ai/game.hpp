@@ -11,7 +11,13 @@ namespace game {
 class Position;
 }
 namespace hash {
+extern Key g_hash_pos[COLOR_SIZE][SQUARE_SIZE];
+extern Key g_hash_turn;
 Key hash_key(const game::Position &pos);
+}
+namespace io {
+std::string io_key(const game::Position &pos);
+game::Position from_io(const std::string io_str);
 }
 namespace game {
 
@@ -75,11 +81,50 @@ private:
     int safe_stone_num_;
     int wall_num_;
 };
+
+class PositionRecord {
+public:
+    PositionRecord(){}
+    PositionRecord(const Key key, const Color turn, const Square ko, const Move prev_move, const int captured_diff) : 
+    key_(key), turn_(turn), ko_(ko), prev_move_(prev_move), captured_diff_(captured_diff) {}
+    bool operator==(const PositionRecord& other) const {
+        return (key_ == other.key_) 
+            && (turn_ == other.turn_) 
+            && (ko_ == other.ko_) 
+           // && (move_to_sq(prev_move_) == move_to_sq(other.prev_move_)) 
+            /*&& (captured_diff_ == other.captured_diff_)*/;
+    }
+    Key key() const {
+        return this->key_;
+    }
+    Move prev_move() const {
+        return this->prev_move_;
+    }
+    Color turn() const {
+        return this->turn_;
+    }
+    Square ko() const {
+        return this->ko_;
+    }
+    void set_ko(const Square sq) {
+        this->ko_ = sq;
+    }
+    int captured_diff() const {
+        return captured_diff_;
+    }
+private:
+    Key key_;
+    Color turn_;
+    Square ko_;
+    Move prev_move_;
+    int captured_diff_;
+};
+
 class Position {
 public:
-    Position() : turn_(BLACK), ko_(SQUARE_NONE), ply_(0)  {
+    Position() : ply_(0)  {
         this->captured_[BLACK] = this->captured_[WHITE] = 0;
-        this->record_[0] = MOVE_PASS;
+        this->stone_num_[BLACK] = this->stone_num_[WHITE] = 0;
         REP_FILE(f) {
             REP_RANK(r) {
                 const auto sq = to_sq(f, r);
@@ -90,14 +135,12 @@ public:
                 }
             }
         }
+        this->record_[0] = PositionRecord(hash::hash_key(*this),BLACK,SQUARE_NONE,MOVE_PASS,0);
     }
-    Position(const Color stones[], const int captured[], const Color turn, const Square ko = SQUARE_NONE, const int ply = 0) :
-        turn_(turn),
-        ko_(ko),
+    Position(const Color stones[], const int captured[], const Color turn, const Square ko = SQUARE_NONE, const Move prev_move = MOVE_PASS, const int ply = 0) :
         ply_(ply) {
         this->captured_[BLACK] = captured[0];
         this->captured_[WHITE] = captured[1];
-        this->record_[0] = MOVE_PASS;
         auto sp = 0;
         REP_FILE(f) {
             { const auto sq = to_sq(f, Rank(RANK_1-1)); this->stones_[sq] = WALL; }
@@ -113,20 +156,34 @@ public:
                 this->stones_[sq] = static_cast<Color>(stones[sp++]);
             }
         }
+        this->count_stone_debug();
+        this->record_[0] = PositionRecord(hash::hash_key(*this),turn,ko,prev_move,(this->stone_num_[BLACK]-this->stone_num_[WHITE]));
     }
-    Position(const uint32 h) {
-    }
+
     Color square(const Square sq) const {
         ASSERT2(sq_is_ok(sq),{Tee<<sq<<std::endl;});
         return this->stones_[sq];
     }
     bool is_done() const {
-        if (this->ply() < 2) {
+        auto score = this->count_score(BLACK);
+        if (std::abs(score) >= int(1 + ((int(FILE_SIZE) - 2) * (int(RANK_SIZE) - 2))/2)) {
+            return true;
+        }
+        if (this->ply() < 1) {
             return false;
         }
-        const auto prev_move = this->record_[this->ply()-1];
-        const auto prev2_move = this->record_[this->ply()-2];
-        return (prev_move == MOVE_PASS && prev2_move == MOVE_PASS);
+        const auto prev_move = this->record_[this->ply()].prev_move();
+        const auto prev2_move = this->record_[this->ply()-1].prev_move();
+        const auto ko = this->ko();
+        return (prev_move == MOVE_PASS && prev2_move == MOVE_PASS && ko == SQUARE_NONE);
+    }
+    bool is_rep() const {
+        for(auto i = this->ply() - 2; i >= 0; i -= 2) {
+            if (this->record_[i] == this->record_[this->ply()]) {
+                return true;
+            }
+        }
+        return false;
     }
     bool is_lose() const {
         if (!this->is_done()) {
@@ -138,7 +195,11 @@ public:
         if (!this->is_done()) {
             return false;
         }
-        return this->count_score(this->turn()) > 0;
+        const auto score = this->count_score(this->turn());
+        if (score >= int(1 + ((int(FILE_SIZE) - 2) * (int(RANK_SIZE) - 2))/2)) {
+            return true;
+        }
+        return score > 0;
     }
     bool is_draw() const {
         if (!this->is_done()) {
@@ -149,32 +210,39 @@ public:
     int ply() const {
         return this->ply_;
     }
-    int count_score(const Color c) const {
-        auto black_score = 0;
-        auto white_score = 0;
-        REP_FILE(f) {
-            REP_RANK(r) {
+    void count_stone_debug() {
+        this->stone_num_[0] = this->stone_num_[1] = this->stone_num_[2] = 0;
+         REP_FILE2(f) {
+            REP_RANK2(r) {
                 const auto sq = to_sq(f,r);
-                switch (this->square(sq)) {
-                    case BLACK:
-                        ++black_score;
-                        break;
-                    case WHITE:
-                        ++white_score;
-                        break;
-                    case EMPTY: {
-                        int nei_count[COLOR_SIZE + 1] = {0,0,0,0};
-                        for (const auto dir : DIR4) {
-                            ++nei_count[this->square(static_cast<Square>(sq + dir))];
-                        }
-                        if (nei_count[BLACK] && !nei_count[WHITE]) {
-                            ++black_score;
-                        } else if (nei_count[WHITE] && !nei_count[BLACK]) {
-                            ++white_score;
-                        }
-                    }
-                    default:
-                        break;
+                ++this->stone_num_[this->square(sq)];
+            }
+        }
+    }
+    void count_stone_debug(int stone_num[]) const {
+        stone_num[0] = stone_num[1] = stone_num[2] = 0;
+         REP_FILE2(f) {
+            REP_RANK2(r) {
+                const auto sq = to_sq(f,r);
+                ++stone_num[this->square(sq)];
+            }
+        }
+    }
+    int count_score(const Color c) const {
+        auto black_score = this->stone_num_[BLACK];
+        auto white_score = this->stone_num_[WHITE];
+        REP_FILE2(f) {
+            REP_RANK2(r) {
+                const auto sq = to_sq(f,r);
+                if (this->square(sq) == EMPTY) { continue; }
+                int nei_count[COLOR_SIZE + 1] = {0,0,0,0};
+                for (const auto dir : DIR4) {
+                    ++nei_count[this->square(static_cast<Square>(sq + dir))];
+                }
+                if (nei_count[BLACK] && !nei_count[WHITE]) {
+                    ++black_score;
+                } else if (nei_count[WHITE] && !nei_count[BLACK]) {
+                    ++white_score;
                 }
             }
         }
@@ -184,15 +252,16 @@ public:
     Position next(const Move action) const {
         auto new_pos = *this;
         const auto opp_color = change_turn(this->turn());
-        new_pos.turn_ = opp_color;
-        new_pos.ko_ = SQUARE_NONE;
-        new_pos.record_[this->ply()] = action;
         ++new_pos.ply_;
         if (action == MOVE_PASS) {
+            const auto key = this->record_[this->ply_].key() ^ hash::g_hash_turn;
+            new_pos.record_[new_pos.ply_] = PositionRecord(key,opp_color,SQUARE_NONE,action,(new_pos.captured_[BLACK]-new_pos.captured_[WHITE]));
             return new_pos;
         } 
         const auto flag = move_to_flag(action);
         const auto sq = move_to_sq(action);
+
+        // 取れる石を消す
         auto clear_stone_num = 0;
         Square clear_stone_list[SQUARE_SIZE] = { SQUARE_SIZE };
         REP(i,4) {
@@ -203,22 +272,47 @@ public:
                 }
             }
         }
+        new_pos.captured_[this->turn()] += clear_stone_num;
+        new_pos.stone_num_[opp_color] -= clear_stone_num;
+        
+        //石を置く
         new_pos.stones_[sq] = this->turn();
+        ++new_pos.stone_num_[this->turn()];
+        
+        // コウになっているかチェック
         NeighborStone ns;
         ns.set_color(this->turn());
         ns.search(new_pos, sq);
+        auto ko_sq = SQUARE_NONE;
         if (clear_stone_num == 1 && ns.stone_num() == 1 && ns.liberty_num() == 1) {
             ASSERT(sq_is_ok(clear_stone_list[0]));
-            new_pos.ko_ = clear_stone_list[0];
+            ko_sq = clear_stone_list[0];
         }
-        new_pos.captured_[this->turn()] += clear_stone_num;
+        // keyの更新
+        auto key = this->record_[this->ply()].key();
+        key ^= hash::g_hash_turn;
+        REP(i, clear_stone_num) {
+            const auto clear_sq = clear_stone_list[i];
+            key ^= hash::g_hash_pos[opp_color][clear_sq];
+        }
+        key ^= hash::g_hash_pos[this->turn()][sq];
+        new_pos.record_[new_pos.ply_] = PositionRecord(key, opp_color, ko_sq, action, (new_pos.captured_[BLACK]-new_pos.captured_[WHITE]));
         return new_pos;
     }
     Color turn() const {
-        return this->turn_;
+        return this->record_[this->ply_].turn();
     }
     Square ko() const {
-        return this->ko_;
+        return this->record_[this->ply_].ko();
+    }
+    void set_ko(const Square sq) {
+        this->record_[this->ply_].set_ko(sq);
+    }
+    Key key() const {
+        return this->record_[this->ply_].key();
+    }
+    int captured(const Color c) const {
+        return this->captured_[c];
     }
     bool is_ok() const {
         REP_RANK(r) {
@@ -242,16 +336,47 @@ public:
                 }
             }
         }
+        int debug_count[COLOR_SIZE] = {};
+        this->count_stone_debug(debug_count);
+        if (debug_count[BLACK] != this->stone_num_[BLACK]) {
+            Tee<<"count error\n";
+            Tee<<debug_count[BLACK]<<std::endl;
+            Tee<<this->stone_num_[BLACK]<<std::endl;
+            return false;
+        }
+        if (debug_count[WHITE] != this->stone_num_[WHITE]) {
+            Tee<<"count error\n";
+            Tee<<debug_count[WHITE]<<std::endl;
+            Tee<<this->stone_num_[WHITE]<<std::endl;
+            return false;
+        }
+        if ((this->captured_[BLACK]-this->captured_[WHITE]) != this->record_[this->ply_].captured_diff()) {
+            Tee<<"captured_diff error\n";
+            Tee<<(this->captured_[BLACK]-this->captured_[WHITE])<<std::endl;
+            Tee<<this->record_[this->ply_].captured_diff()<<std::endl;
+            return false;
+        }
+        const auto debug_key = hash::hash_key(*this);
+        if (debug_key != this->key()) {
+            Tee<<"key error\n";
+            Tee<<debug_key<<std::endl;
+            Tee<<this->key()<<std::endl;
+            return false;
+        }
         return true;
     }
     std::string str() const {
         std::string str = "";
         str += "turn:" + color_str(this->turn()) + "\n";
         str += "ply:" + to_string(this->ply()) + "\n";
-        if (this->ko_ == SQUARE_NONE) {
+        str += "hash:" + to_string(this->key()) + "\n";
+        str += "prev_move:" + move_str(this->record_[this->ply_].prev_move()) + "\n";
+        str += "score:" + to_string(this->count_score(this->turn())) + "\n";
+        str += "io:" + io::io_key(*this) + "\n";
+        if (this->ko() == SQUARE_NONE) {
             str += "ko:NONE\n";
         } else {
-            str += "ko:"+move_str(make_move(REMOVE_NONE, this->ko_))+"\n";
+            str += "ko:"+move_str(make_move(REMOVE_NONE, this->ko()))+"\n";
         }
         str += "white captured:" + to_string(this->captured_[WHITE]) + "\n";
         REP_RANK2(r) {
@@ -285,6 +410,7 @@ public:
     Key history() const {
         return Key(0);
     }
+
 	friend std::ostream& operator<<(std::ostream& os, const Position& pos) {
         os << pos.str();
 		return os;
@@ -309,10 +435,11 @@ private:
 
     Color stones_[SQUARE_SIZE];
     int captured_[COLOR_SIZE];
-    Color turn_;
-    Square ko_;
-    Move record_[MAX_PLY];
+    int stone_num_[COLOR_SIZE];
     int ply_;
+public:
+    PositionRecord record_[MAX_PLY];
+
 };
 
 
